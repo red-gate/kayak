@@ -8,5 +8,10 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyVersion("0.7.2")]
 [assembly: AssemblyFileVersion("0.7.2")]
 
-[assembly: InternalsVisibleTo("Kayak.Tests")]
+#if DEBUG
+    [assembly: InternalsVisibleTo("Kayak.Tests")]
+#endif
+
+
+
 

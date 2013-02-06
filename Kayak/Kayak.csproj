@@ -40,6 +40,18 @@
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
     <NoWarn>1591</NoWarn>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release-Signed-4.0|AnyCPU'">
+    <OutputPath>bin\Release-Signed-4.0\</OutputPath>
+    <DocumentationFile>bin\Release\Kayak.xml</DocumentationFile>
+    <Optimize>true</Optimize>
+    <NoWarn>1591</NoWarn>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>kayak.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="System.Core">
       <RequiredTargetFramework>3.5</RequiredTargetFramework>
@@ -73,6 +85,9 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="..\lib\httpmachine\src\HttpMachine\HttpParser.cs" />
     <Compile Include="..\lib\httpmachine\src\HttpMachine\IHttpParserDelegate.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="kayak.snk" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <!--
