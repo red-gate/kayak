@@ -4,12 +4,8 @@
     <id>Kayak-signed</id>
     <version>0.0.0</version> <!-- The real version will be added by rake -->
     <authors>Benjamin van der Veen</authors>
-    <owners></owners>
     <description>Kayak is an event-base IO libary for .NET. Kayak allows you to easily create TCP clients and servers, and contains an HTTP/1.1 server implementation.</description>
     <language>en-US</language>
-    <projectUrl></projectUrl>
-    <licenseUrl></licenseUrl>
-    <tags></tags>
   </metadata>
   <files>
     <file src="bin\*.*" target="lib\net40" />
