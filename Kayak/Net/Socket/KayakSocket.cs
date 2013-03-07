@@ -25,6 +25,8 @@ namespace Kayak
         private Action m_Continuation;
         private IScheduler m_Scheduler;
 
+        private readonly object m_LockObject = new object();
+
         internal DefaultKayakSocket(ISocketDelegate del, IScheduler scheduler)
         {
             this.m_Scheduler = scheduler;
@@ -222,111 +224,117 @@ namespace Kayak
 
         public bool Write(ArraySegment<byte> data, Action continuation)
         {
-            m_State.BeginWrite(data.Count > 0);
-
-            if (data.Count == 0) return false;
-
-            if (this.m_Continuation != null) 
-                throw new InvalidOperationException("Write was pending.");
-
-            if (m_Buffer == null)
-                m_Buffer = new OutputBuffer();
-
-            var bufferSize = m_Buffer.Size;
-
-            // XXX copy! could optimize here?
-            m_Buffer.Add(data);
-            Debug.WriteLine("KayakSocket: added " + data.Count + " bytes to buffer, buffer size was " + bufferSize + ", buffer size is " + m_Buffer.Size);
-
-            if (bufferSize > 0)
+            lock (m_LockObject)
             {
-                // we're between an async beginsend and endsend,
-                // and user did not provide continuation
+                m_State.BeginWrite(data.Count > 0);
 
-                if (continuation != null)
+                if (data.Count == 0) return false;
+
+                if (this.m_Continuation != null)
+                    throw new InvalidOperationException("Write was pending.");
+
+                if (m_Buffer == null)
+                    m_Buffer = new OutputBuffer();
+
+                var bufferSize = m_Buffer.Size;
+
+                // XXX copy! could optimize here?
+                m_Buffer.Add(data);
+                Debug.WriteLine("KayakSocket: added " + data.Count + " bytes to buffer, buffer size was " + bufferSize + ", buffer size is " + m_Buffer.Size);
+
+                if (bufferSize > 0)
                 {
-                    this.m_Continuation = continuation;
-                    return true;
+                    // we're between an async beginsend and endsend,
+                    // and user did not provide continuation
+
+                    if (continuation != null)
+                    {
+                        this.m_Continuation = continuation;
+                        return true;
+                    }
+                    else
+                        return false;
                 }
                 else
-                    return false;
-            }
-            else
-            {
-                var result = BeginSend();
+                {
+                    var result = BeginSend();
 
-                // tricky: potentially throwing away fact that send will complete async
-                if (continuation == null)
-                    result = false;
+                    // tricky: potentially throwing away fact that send will complete async
+                    if (continuation == null)
+                        result = false;
 
-                if (result)
-                    this.m_Continuation = continuation;
+                    if (result)
+                        this.m_Continuation = continuation;
 
-                return result;
+                    return result;
+                }
             }
         }
 
         bool BeginSend()
         {
-            while (true)
+            lock (m_LockObject)
             {
-                if (BufferIsEmpty())
-                    break;
-
-                int written = 0;
-                Exception error;
-                IAsyncResult ar0;
-
-                try
+                while (true)
                 {
-                    ar0 = m_Socket.BeginSend(m_Buffer.Data, ar =>
+                    if (BufferIsEmpty())
+                        break;
+
+                    int written = 0;
+                    Exception error;
+                    IAsyncResult ar0;
+
+                    try
                     {
-                        if (ar.CompletedSynchronously)
-                            return;
-
-                        written = EndSend(ar, out error);
-						
-						// small optimization
-                        if (error is ObjectDisposedException)
-                            return;
-
-                        m_Scheduler.Post(() =>
+                        ar0 = m_Socket.BeginSend(m_Buffer.Data, ar =>
                         {
-                            if (error != null)
-                                HandleSendError(error);
-                            else
-                                HandleSendResult(written, false);
+                            if (ar.CompletedSynchronously)
+                                return;
 
-                            if (!BeginSend() && m_Continuation != null)
+                            written = EndSend(ar, out error);
+
+                            // small optimization
+                            if (error is ObjectDisposedException)
+                                return;
+
+                            m_Scheduler.Post(() =>
                             {
-                                var c = m_Continuation;
-                                m_Continuation = null;
-                                c();
-                            }
+                                if (error != null)
+                                    HandleSendError(error);
+                                else
+                                    HandleSendResult(written, false);
+
+                                if (!BeginSend() && m_Continuation != null)
+                                {
+                                    var c = m_Continuation;
+                                    m_Continuation = null;
+                                    c();
+                                }
+                            });
                         });
-                    });
-                }
-                catch (Exception e)
-                {
-                    HandleSendError(e);
-                    break;
+                    }
+                    catch (Exception e)
+                    {
+                        HandleSendError(e);
+                        break;
+                    }
+
+                    if (!ar0.CompletedSynchronously)
+                        return true;
+
+                    written = EndSend(ar0, out error);
+
+                    if (error != null)
+                    {
+                        HandleSendError(error);
+                        break;
+                    }
+                    else
+                        HandleSendResult(written, true);
                 }
 
-                if (!ar0.CompletedSynchronously)
-                    return true;
-
-                written = EndSend(ar0, out error);
-
-                if (error != null)
-                {
-                    HandleSendError(error);
-                    break;
-                }
-                else
-                    HandleSendResult(written, true);
+                return false;
             }
-
-            return false;
         }
 
         int EndSend(IAsyncResult ar, out Exception error)
